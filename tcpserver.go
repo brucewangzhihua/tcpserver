@@ -1,16 +1,17 @@
 package tcpserver
 
 import (
-	"bufio"
 	"crypto/tls"
 	"log"
 	"net"
+
+	"github.com/brucewangzhihua/logger"
 )
 
 // Client holds info about connection
 type Client struct {
-	conn   net.Conn
-	Server *server
+	Connection net.Conn
+	Server     *server
 }
 
 // TCP server
@@ -19,44 +20,34 @@ type server struct {
 	config                   *tls.Config
 	onNewClientCallback      func(c *Client)
 	onClientConnectionClosed func(c *Client, err error)
-	onNewMessage             func(c *Client, message string)
 }
 
 // listen Read client data from channel
 func (c *Client) listen() {
 	c.Server.onNewClientCallback(c)
-	reader := bufio.NewReader(c.conn)
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			c.conn.Close()
-			c.Server.onClientConnectionClosed(c, err)
-			return
-		}
-		c.Server.onNewMessage(c, message)
-	}
 }
 
 // Send text message to client
-func (c *Client) Send(message string) error {
-	_, err := c.conn.Write([]byte(message))
+func (c *Client) Send(message []byte) error {
+	logger.Debug("Send", message)
+	_, err := c.Connection.Write(message)
 	return err
 }
 
 // SendBytes Send bytes to client
 func (c *Client) SendBytes(b []byte) error {
-	_, err := c.conn.Write(b)
+	_, err := c.Connection.Write(b)
 	return err
 }
 
 // Conn Get connection
 func (c *Client) Conn() net.Conn {
-	return c.conn
+	return c.Connection
 }
 
 // Close Close server
 func (c *Client) Close() error {
-	return c.conn.Close()
+	return c.Connection.Close()
 }
 
 // Called right after server starts listening new client
@@ -67,11 +58,6 @@ func (s *server) OnNewClient(callback func(c *Client)) {
 // OnClientConnectionClosed Called right after connection closed
 func (s *server) OnClientConnectionClosed(callback func(c *Client, err error)) {
 	s.onClientConnectionClosed = callback
-}
-
-// OnNewMessage Called when Client receives new message
-func (s *server) OnNewMessage(callback func(c *Client, message string)) {
-	s.onNewMessage = callback
 }
 
 // Listen starts network server
@@ -89,10 +75,10 @@ func (s *server) Listen() {
 	defer listener.Close()
 
 	for {
-		conn, _ := listener.Accept()
+		Connection, _ := listener.Accept()
 		client := &Client{
-			conn:   conn,
-			Server: s,
+			Connection: Connection,
+			Server:     s,
 		}
 		go client.listen()
 	}
@@ -107,7 +93,6 @@ func New(address string) *server {
 	}
 
 	server.OnNewClient(func(c *Client) {})
-	server.OnNewMessage(func(c *Client, message string) {})
 	server.OnClientConnectionClosed(func(c *Client, err error) {})
 
 	return server
@@ -126,7 +111,6 @@ func NewWithTLS(address string, certFile string, keyFile string) *server {
 	}
 
 	server.OnNewClient(func(c *Client) {})
-	server.OnNewMessage(func(c *Client, message string) {})
 	server.OnClientConnectionClosed(func(c *Client, err error) {})
 
 	return server
